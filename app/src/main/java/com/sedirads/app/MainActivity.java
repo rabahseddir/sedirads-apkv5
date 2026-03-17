@@ -48,7 +48,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException;
 import com.google.android.material.button.MaterialButton;
 
 import java.io.BufferedReader;
@@ -151,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
                         if (e instanceof NoCredentialException) {
                             Toast.makeText(MainActivity.this, R.string.google_sign_in_no_account, Toast.LENGTH_LONG).show();
                         } else {
-                            Toast.makeText(MainActivity.this, getString(R.string.google_sign_in_failed), Toast.LENGTH_LONG).show();
+                            Toast.makeText(MainActivity.this, R.string.google_sign_in_failed, Toast.LENGTH_LONG).show();
                         }
                     }
                 }
@@ -168,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
 
         CustomCredential customCredential = (CustomCredential) credential;
         String credentialType = customCredential.getType();
+
         if (!GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credentialType)
                 && !GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL.equals(credentialType)) {
             Toast.makeText(this, R.string.google_sign_in_failed, Toast.LENGTH_LONG).show();
@@ -175,15 +175,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         try {
-            GoogleIdTokenCredential googleCredential = GoogleIdTokenCredential.createFrom(customCredential.getData());
+            GoogleIdTokenCredential googleCredential =
+                    GoogleIdTokenCredential.createFrom(customCredential.getData());
             syncGoogleLoginToWebsite(googleCredential.getIdToken());
-        } catch (GoogleIdTokenParsingException e) {
+        } catch (IllegalArgumentException | NullPointerException e) {
             Toast.makeText(this, R.string.google_sign_in_failed, Toast.LENGTH_LONG).show();
         }
     }
 
     private void syncGoogleLoginToWebsite(@NonNull String idToken) {
         progressBar.setVisibility(View.VISIBLE);
+
         networkExecutor.execute(() -> {
             HttpURLConnection connection = null;
 
@@ -200,6 +202,7 @@ public class MainActivity extends AppCompatActivity {
                 connection.setRequestProperty("X-Requested-With", getPackageName());
 
                 String payload = "id_token=" + URLEncoder.encode(idToken, StandardCharsets.UTF_8.name());
+
                 try (OutputStream os = connection.getOutputStream()) {
                     os.write(payload.getBytes(StandardCharsets.UTF_8));
                 }
@@ -219,18 +222,15 @@ public class MainActivity extends AppCompatActivity {
                             cookieManager.setCookie(baseUrl, cookie);
                             cookieManager.setCookie(getString(R.string.google_native_login_url), cookie);
                         }
-                        cookieManager.flush();
 
+                        cookieManager.flush();
                         Toast.makeText(MainActivity.this, R.string.google_sign_in_success, Toast.LENGTH_LONG).show();
                         webView.loadUrl(getString(R.string.app_post_login_url));
                     } else {
-                        if (responseBody != null && !responseBody.trim().isEmpty()) {
-                            Toast.makeText(MainActivity.this, getString(R.string.google_sign_in_failed), Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(MainActivity.this, getString(R.string.google_sign_in_failed), Toast.LENGTH_LONG).show();
-                        }
+                        Toast.makeText(MainActivity.this, R.string.google_sign_in_failed, Toast.LENGTH_LONG).show();
                     }
                 });
+
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     progressBar.setVisibility(View.GONE);
@@ -247,30 +247,41 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private List<String> extractSetCookieHeaders(@NonNull HttpURLConnection connection) {
         java.util.ArrayList<String> cookies = new java.util.ArrayList<>();
+
         for (Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet()) {
-            if (entry.getKey() != null && "Set-Cookie".equalsIgnoreCase(entry.getKey()) && entry.getValue() != null) {
+            if (entry.getKey() != null
+                    && "Set-Cookie".equalsIgnoreCase(entry.getKey())
+                    && entry.getValue() != null) {
                 cookies.addAll(entry.getValue());
             }
         }
+
         return cookies;
     }
 
     @Nullable
     private String readResponseBody(@NonNull HttpURLConnection connection) {
-        InputStream inputStream = null;
+        InputStream inputStream;
+
         try {
-            inputStream = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            inputStream = connection.getResponseCode() >= 400
+                    ? connection.getErrorStream()
+                    : connection.getInputStream();
+
             if (inputStream == null) {
                 return "";
             }
 
             StringBuilder builder = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     builder.append(line).append('\n');
                 }
             }
+
             return builder.toString();
         } catch (Exception e) {
             return "";
@@ -281,7 +292,10 @@ public class MainActivity extends AppCompatActivity {
     private String generateSecureRandomNonce() {
         byte[] randomBytes = new byte[32];
         new SecureRandom().nextBytes(randomBytes);
-        return Base64.encodeToString(randomBytes, Base64.NO_WRAP | Base64.URL_SAFE | Base64.NO_PADDING);
+        return Base64.encodeToString(
+                randomBytes,
+                Base64.NO_WRAP | Base64.URL_SAFE | Base64.NO_PADDING
+        );
     }
 
     private void setupLaunchers() {
@@ -295,6 +309,7 @@ public class MainActivity extends AppCompatActivity {
                 granted -> {
                     SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
                     prefs.edit().putBoolean(PREF_NOTIFICATION_ASKED, true).apply();
+
                     if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         Toast.makeText(this, R.string.notification_denied_message, Toast.LENGTH_LONG).show();
                     }
@@ -321,11 +336,14 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " SediradsAndroidApp/1.1 CredentialManager");
+        settings.setUserAgentString(
+                settings.getUserAgentString() + " SediradsAndroidApp/1.1 CredentialManager"
+        );
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             settings.setSafeBrowsingEnabled(true);
         }
@@ -360,12 +378,15 @@ public class MainActivity extends AppCompatActivity {
             filePathCallback.onReceiveValue(null);
             filePathCallback = null;
         }
+
         if (webView != null) {
             webView.destroy();
         }
+
         if (networkExecutor != null) {
             networkExecutor.shutdownNow();
         }
+
         super.onDestroy();
     }
 
@@ -394,6 +415,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         Uri[] results = null;
+
         if (result.getResultCode() == RESULT_OK) {
             Intent data = result.getData();
             if (data != null) {
@@ -420,6 +442,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         intent.addCategory(Intent.CATEGORY_BROWSABLE);
+
         try {
             startActivity(intent);
             return true;
@@ -435,6 +458,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.US);
+
         if (scheme.equals("http") || scheme.equals("https")) {
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.US);
             return appHosts.contains(host) || host.endsWith(".sedirads.com");
@@ -465,7 +489,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
-            progressBar.setVisibility(ProgressBar.VISIBLE);
+            progressBar.setVisibility(View.VISIBLE);
         }
 
         @Override
@@ -490,17 +514,20 @@ public class MainActivity extends AppCompatActivity {
         public void onProgressChanged(WebView view, int newProgress) {
             super.onProgressChanged(view, newProgress);
             progressBar.setProgress(newProgress);
+
             if (newProgress >= 100) {
-                progressBar.setVisibility(ProgressBar.GONE);
+                progressBar.setVisibility(View.GONE);
             } else {
-                progressBar.setVisibility(ProgressBar.VISIBLE);
+                progressBar.setVisibility(View.VISIBLE);
             }
         }
 
         @Override
-        public boolean onShowFileChooser(WebView webView,
-                                         ValueCallback<Uri[]> filePathCallback,
-                                         FileChooserParams fileChooserParams) {
+        public boolean onShowFileChooser(
+                WebView webView,
+                ValueCallback<Uri[]> filePathCallback,
+                FileChooserParams fileChooserParams
+        ) {
             if (MainActivity.this.filePathCallback != null) {
                 MainActivity.this.filePathCallback.onReceiveValue(null);
             }
@@ -523,7 +550,13 @@ public class MainActivity extends AppCompatActivity {
 
     private final class AppDownloadListener implements DownloadListener {
         @Override
-        public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
+        public void onDownloadStart(
+                String url,
+                String userAgent,
+                String contentDisposition,
+                String mimetype,
+                long contentLength
+        ) {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             request.setMimeType(mimetype);
 
@@ -531,19 +564,29 @@ public class MainActivity extends AppCompatActivity {
             if (cookies != null) {
                 request.addRequestHeader("cookie", cookies);
             }
+
             request.addRequestHeader("User-Agent", userAgent);
             request.setDescription(getString(R.string.download_description));
+
             String guessedFileName = URLUtil.guessFileName(url, contentDisposition, mimetype);
             String extension = MimeTypeMap.getFileExtensionFromUrl(url);
             if (extension != null && !extension.isEmpty() && !guessedFileName.contains(".")) {
                 guessedFileName = guessedFileName + "." + extension;
             }
+
             request.setTitle(guessedFileName);
             request.allowScanningByMediaScanner();
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, guessedFileName);
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+            );
+            request.setDestinationInExternalPublicDir(
+                    android.os.Environment.DIRECTORY_DOWNLOADS,
+                    guessedFileName
+            );
 
-            DownloadManager downloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            DownloadManager downloadManager =
+                    (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+
             if (downloadManager != null) {
                 downloadManager.enqueue(request);
                 Toast.makeText(MainActivity.this, R.string.download_started, Toast.LENGTH_SHORT).show();
